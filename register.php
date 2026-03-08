@@ -98,9 +98,18 @@ $csrf_token=generateCsrfToken();
 
                     <form id="registerForm" action="register_process.php" method="POST" enctype="multipart/form-data">
                         
+                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <input type="hidden" name="event_id" value="<?php echo $event_id; ?>">
+                        
                         <div class="mb-3">
                             <label for="full_name" class="form-label">Nama Lengkap</label>
                             <input type="text" class="form-control" id="full_name" name="full_name" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="email" name="email" required 
+                                placeholder="contoh@email.com">
                         </div>
 
                         <!-- Field untuk event umum -->
@@ -138,13 +147,24 @@ $csrf_token=generateCsrfToken();
                             <input type="hidden" name="payment_proof" value="">
                         <?php endif; ?>
 
-                        <button type="submit" class="btn btn-primary">Daftar</button>
+                        <div class="d-flex gap-3">
+                            <a href="index.php" class="btn btn-outline-secondary w-50">
+                                <i class="fas fa-arrow-left me-2"></i>Kembali
+                            </a>
+                            <button type="submit" class="btn btn-primary w-50">
+                                <i class="fas fa-paper-plane me-2"></i>Daftar Sekarang
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<?php if ($msg = flash('error')): ?>
+    <div class="alert alert-danger"><?= $msg ?></div>
+<?php endif; ?>
 
 <?php
 $stmt->close();

@@ -22,6 +22,14 @@ if ($stmt->affected_rows > 0) {
 
 $stmt->close();
 $conn->close();
-header('Location: ' . $_SERVER['HTTP_REFERER']);
+header("Location: participants.php?event_id=" . $event_id);
+exit;
+
+$referer = $_SERVER['HTTP_REFERER'] ?? '';
+if (strpos($referer, 'participants.php') !== false) {
+    header('Location: ' . $referer);
+} else {
+    header('Location: events.php');
+}
 exit;
 ?>

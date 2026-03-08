@@ -38,7 +38,7 @@ include '../includes/header.php';
         <h2 class="fw-bold text-primary"><i class="fas fa-users me-2"></i>Peserta Event</h2>
         <div>
             <a href="events.php" class="btn btn-outline-secondary me-2"><i class="fas fa-arrow-left me-2"></i>Kembali</a>
-            <a href="export_excel.php?event_id=<?php echo $event_id; ?>" class="btn btn-success"><i class="fas fa-file-excel me-2"></i>Export Excel</a>
+            <a href="export_excel.php?event_id=..." class="btn btn-success"><i class="fas fa-file-csv me-2"></i>Export CSV </a>
         </div>
     </div>
 
@@ -137,6 +137,10 @@ include '../includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($msg = flash('error')): ?>
+    <div class="alert alert-danger"><?= $msg ?></div>
+<?php endif; ?>
 
 <?php
 $conn->close();

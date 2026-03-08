@@ -1,13 +1,16 @@
 <?php
 session_start();
+require_once 'includes/auth.php';
 require_once '../config/database.php';
 
-$id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-if ($id == 0) {
-    $_SESSION['error'] = "ID event tidak valid.";
-    header('Location: events.php');
-    exit;
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: events.php'); exit;
 }
+if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+    $_SESSION['error'] = "Token tidak valid.";
+    header('Location: events.php'); exit;
+}
+$id = intval($_POST['id']);
 
 // Hapus event (registrasi akan terhapus otomatis karena ON DELETE CASCADE)
 $sql = "DELETE FROM events WHERE id = ?";
@@ -24,4 +27,5 @@ $stmt->close();
 $conn->close();
 header('Location: events.php');
 exit;
+
 ?>

@@ -1,10 +1,34 @@
 <?php
 session_start();
+require_once 'includes/auth.php';
 require_once '../config/database.php';
 
 if ($_SERVER['REQUEST_METHOD'] != 'POST') {
     header('Location: events.php');
     exit;
+}
+
+function validateUploadedImage($file, $maxSizeMB = 2): array {
+    $allowed_mime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    $allowed_ext  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'msg' => 'Upload gagal (kode: ' . $file['error'] . ')'];
+    }
+    if ($file['size'] > $maxSizeMB * 1024 * 1024) {
+        return ['ok' => false, 'msg' => "Ukuran file maks {$maxSizeMB}MB."];
+    }
+    // Cek MIME type yang sebenarnya (bukan dari header)
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = $finfo->file($file['tmp_name']);
+    if (!in_array($mime, $allowed_mime)) {
+        return ['ok' => false, 'msg' => 'Tipe file tidak didukung. Gunakan JPG, PNG, atau GIF.'];
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed_ext)) {
+        return ['ok' => false, 'msg' => 'Ekstensi file tidak valid.'];
+    }
+    return ['ok' => true];
 }
 
 $name = trim($_POST['name']);

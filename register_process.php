@@ -63,6 +63,7 @@ $ip = $_SERVER['REMOTE_ADDR'];
 if (!checkRateLimit($ip, $conn)) {
     $_SESSION['error'] = "Terlalu banyak pendaftaran dari IP Anda. Silakan coba lagi nanti.";
     header("Location: index.php");
+    return $count < 10;
     exit;
 }
 

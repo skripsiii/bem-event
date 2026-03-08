@@ -61,11 +61,7 @@ $result = $conn->query($sql);
                         <?php 
                         $no = 1;
                         while ($event = $result->fetch_assoc()): 
-                            $sql_count = "SELECT COUNT(*) as total FROM registrations WHERE event_id = ?";
-                            $stmt = $conn->prepare($sql_count);
-                            $stmt->bind_param("i", $event['id']);
-                            $stmt->execute();
-                            $registered = $stmt->get_result()->fetch_assoc()['total'];
+                            $registered = $event['registered'];
                             $remaining = $event['quota'] - $registered;
                         ?>
                         <tr>
@@ -94,7 +90,15 @@ $result = $conn->query($sql);
                                 <div class="btn-group" role="group">
                                     <a href="participants.php?event_id=<?php echo $event['id']; ?>" class="btn btn-sm btn-info" title="Lihat Peserta" data-bs-toggle="tooltip"><i class="fas fa-users"></i></a>
                                     <a href="event_edit.php?id=<?php echo $event['id']; ?>" class="btn btn-sm btn-warning" title="Edit" data-bs-toggle="tooltip"><i class="fas fa-edit"></i></a>
-                                    <a href="event_delete.php?id=<?php echo $event['id']; ?>" class="btn btn-sm btn-danger btn-delete" title="Hapus" data-bs-toggle="tooltip"><i class="fas fa-trash"></i></a>
+                                    <form action="event_delete.php" method="POST" class="d-inline">
+                                        <input type="hidden" name="csrf_token" 
+                                            value="<?php echo htmlspecialchars(generateCsrfToken()); ?>">
+                                        <input type="hidden" name="id" value="<?php echo $event['id']; ?>">
+                                        <button type="submit" class="btn btn-sm btn-danger btn-delete" 
+                                                title="Hapus">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
                                     <a href="toggle_event.php?id=<?php echo $event['id']; ?>" class="btn btn-sm btn-secondary btn-toggle" title="<?php echo $event['is_active'] ? 'Nonaktifkan' : 'Aktifkan'; ?>" data-bs-toggle="tooltip">
                                         <?php if ($event['is_active']): ?>
                                             <i class="fas fa-ban"></i>
@@ -112,6 +116,10 @@ $result = $conn->query($sql);
         </div>
     </div>
 </div>
+
+<?php if ($msg = flash('error')): ?>
+    <div class="alert alert-danger"><?= $msg ?></div>
+<?php endif; ?>
 
 <?php
 $conn->close();

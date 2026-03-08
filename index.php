@@ -6,77 +6,65 @@ require_once 'config/database.php';
 $today = date('Y-m-d');
 
 // ===== PAGINATION =====
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 6; // jumlah event per halaman
+$page   = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$limit  = 6;
 $offset = ($page - 1) * $limit;
 
 // ===== SEARCH & FILTER =====
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$search   = isset($_GET['search'])   ? trim($_GET['search'])   : '';
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
 
-// ===== QUERY UTAMA DENGAN SUBQUERY UNTUK JUMLAH PENDAFTAR =====
-$sql = "SELECT e.*, 
-        (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) as registered 
-        FROM events e 
-        WHERE e.registration_open <= ? AND e.registration_close >= ?";
-
-$params = [$today, $today];
-$types = "ss";
+// ===== BUILD WHERE CLAUSE =====
+// Selalu sertakan is_active = 1 agar event nonaktif tidak muncul
+$where      = "e.is_active = 1 AND e.registration_open <= ? AND e.registration_close >= ?";
+$mainTypes  = "ss";
+$mainParams = [$today, $today];
 
 if (!empty($search)) {
-    $sql .= " AND (e.name LIKE ? OR e.description LIKE ?)";
-    $search_param = "%$search%";
-    $params[] = $search_param;
-    $params[] = $search_param;
-    $types .= "ss";
+    $where        .= " AND (e.name LIKE ? OR e.description LIKE ?)";
+    $searchParam   = "%" . $search . "%";
+    $mainTypes    .= "ss";
+    $mainParams[]  = $searchParam;
+    $mainParams[]  = $searchParam;
 }
 
 if (!empty($category)) {
-    $sql .= " AND e.category = ?";
-    $params[] = $category;
-    $types .= "s";
+    $where        .= " AND e.category = ?";
+    $mainTypes    .= "s";
+    $mainParams[]  = $category;
 }
 
-$sql .= " ORDER BY e.registration_close ASC LIMIT ? OFFSET ?";
-$params[] = $limit;
-$params[] = $offset;
-$types .= "ii";
+// ===== HITUNG TOTAL UNTUK PAGINATION (pakai params yang sama) =====
+$countSql    = "SELECT COUNT(*) as total FROM events e WHERE $where";
+$stmtCount   = $conn->prepare($countSql);
+$stmtCount->bind_param($mainTypes, ...$mainParams);
+$stmtCount->execute();
+$totalRows   = $stmtCount->get_result()->fetch_assoc()['total'];
+$totalPages  = ceil($totalRows / $limit);
+$stmtCount->close();
 
-$stmt = $conn->prepare($sql);
-$stmt->bind_param($types, ...$params);
+// ===== QUERY UTAMA: tambahkan LIMIT & OFFSET di akhir =====
+$mainSql = "SELECT e.*,
+                (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) AS registered
+            FROM events e
+            WHERE $where
+            ORDER BY e.registration_close ASC
+            LIMIT ? OFFSET ?";
+
+$finalTypes    = $mainTypes . "ii";
+$finalParams   = array_merge($mainParams, [$limit, $offset]);
+
+$stmt = $conn->prepare($mainSql);
+$stmt->bind_param($finalTypes, ...$finalParams);
 $stmt->execute();
 $result = $stmt->get_result();
-
-// ===== HITUNG TOTAL DATA UNTUK PAGINATION =====
-$count_sql = "SELECT COUNT(*) as total FROM events e WHERE e.registration_open <= ? AND e.registration_close >= ?";
-$count_params = [$today, $today];
-$count_types = "ss";
-
-if (!empty($search)) {
-    $count_sql .= " AND (e.name LIKE ? OR e.description LIKE ?)";
-    $count_params[] = $search_param;
-    $count_params[] = $search_param;
-    $count_types .= "ss";
-}
-if (!empty($category)) {
-    $count_sql .= " AND e.category = ?";
-    $count_params[] = $category;
-    $count_types .= "s";
-}
-
-$stmt_count = $conn->prepare($count_sql);
-$stmt_count->bind_param($count_types, ...$count_params);
-$stmt_count->execute();
-$total_result = $stmt_count->get_result();
-$total_rows = $total_result->fetch_assoc()['total'];
-$total_pages = ceil($total_rows / $limit);
 ?>
 
 <div class="container">
     <div class="row mb-4">
         <div class="col text-center">
-            <h1 class="display-4">Selamat Datang di Sistem Pendaftaran Event</h1>
-            <p class="lead">BEM Fakultas Ilmu Komputer Universitas Singaperbangsa Karawang</p>
+            <h1 class="display-4 fw-bold">Selamat Datang di Sistem Pendaftaran Event</h1>
+            <p class="lead text-muted">BEM Fakultas Ilmu Komputer Universitas Singaperbangsa Karawang</p>
         </div>
     </div>
 
@@ -85,72 +73,146 @@ $total_pages = ceil($total_rows / $limit);
         <div class="col-md-8 mx-auto">
             <form method="GET" class="row g-3">
                 <div class="col-md-5">
-                    <input type="text" name="search" class="form-control" placeholder="Cari event..." value="<?php echo htmlspecialchars($search); ?>">
+                    <input type="text" name="search" class="form-control"
+                           placeholder="Cari event..."
+                           value="<?php echo htmlspecialchars($search); ?>">
                 </div>
                 <div class="col-md-4">
                     <select name="category" class="form-select">
                         <option value="">Semua Kategori</option>
-                        <option value="Seminar" <?php echo $category=='Seminar'?'selected':''; ?>>Seminar</option>
-                        <option value="Workshop" <?php echo $category=='Workshop'?'selected':''; ?>>Workshop</option>
-                        <option value="Lomba" <?php echo $category=='Lomba'?'selected':''; ?>>Lomba</option>
-                        <option value="Sosial" <?php echo $category=='Sosial'?'selected':''; ?>>Sosial</option>
-                        <option value="Pelatihan" <?php echo $category=='Pelatihan'?'selected':''; ?>>Pelatihan</option>
-                        <option value="Lainnya" <?php echo $category=='Lainnya'?'selected':''; ?>>Lainnya</option>
+                        <?php
+                        $categories = ['Seminar','Workshop','Lomba','Sosial','Pelatihan','Lainnya'];
+                        foreach ($categories as $cat):
+                        ?>
+                            <option value="<?php echo $cat; ?>"
+                                <?php echo ($category === $cat) ? 'selected' : ''; ?>>
+                                <?php echo $cat; ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i> Filter
+                    </button>
                 </div>
+                <?php if (!empty($search) || !empty($category)): ?>
+                <div class="col-md-1">
+                    <a href="index.php" class="btn btn-outline-secondary w-100" title="Reset">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+                <?php endif; ?>
             </form>
         </div>
     </div>
 
+    <!-- Daftar Event -->
     <div class="row">
         <?php if ($result->num_rows > 0): ?>
-            <?php while ($event = $result->fetch_assoc()): 
-                $registered = $event['registered']; // dari subquery
-                $remaining = $event['quota'] - $registered;
-                $is_full = ($remaining <= 0);
+            <?php while ($event = $result->fetch_assoc()):
+                $registered = (int)$event['registered'];
+                $remaining  = $event['quota'] - $registered;
+                $isFull     = ($remaining <= 0);
+                $percent    = $event['quota'] > 0
+                              ? min(100, round($registered / $event['quota'] * 100))
+                              : 100;
             ?>
                 <div class="col-md-4 mb-4">
-                    <div class="card event-card h-100">
+                    <div class="card event-card h-100 shadow-sm">
                         <?php if (!empty($event['documentation'])): ?>
-                            <img src="<?php echo BASE_URL; ?>uploads/<?php echo $event['documentation']; ?>" 
-                                 class="card-img-top" alt="Dokumentasi" style="height: 180px; object-fit: cover;">
+                            <img src="<?php echo BASE_URL; ?>uploads/<?php echo htmlspecialchars($event['documentation']); ?>"
+                                 class="card-img-top" alt="Dokumentasi"
+                                 style="height:180px; object-fit:cover;">
+                        <?php else: ?>
+                            <div class="card-img-top d-flex align-items-center justify-content-center bg-light"
+                                 style="height:180px;">
+                                <i class="fas fa-calendar-alt fa-3x text-muted"></i>
+                            </div>
                         <?php endif; ?>
-                        <div class="card-body">
+
+                        <!-- Badge kategori -->
+                        <span class="badge bg-info position-absolute top-0 end-0 m-2">
+                            <?php echo htmlspecialchars($event['category']); ?>
+                        </span>
+
+                        <div class="card-body d-flex flex-column">
                             <h5 class="card-title"><?php echo htmlspecialchars($event['name']); ?></h5>
-                            <p class="card-text"><?php echo nl2br(htmlspecialchars(substr($event['description'], 0, 100))) . '...'; ?></p>
-                            <p class="card-text">
-                                <small class="text-muted">
-                                    <i class="fas fa-tag me-1"></i> Kategori: <?php echo htmlspecialchars($event['category']); ?><br>
-                                    <i class="fas fa-money-bill me-1"></i> Biaya: <?php echo $event['price'] > 0 ? 'Rp ' . number_format($event['price'], 0, ',', '.') : 'Gratis'; ?><br>
-                                    <i class="fas fa-users me-1"></i> Kuota: <?php echo $event['quota']; ?> peserta<br>
-                                    <i class="fas fa-user-check me-1"></i> Terdaftar: <?php echo $registered; ?><br>
-                                    <i class="fas fa-calendar me-1"></i> Pendaftaran: <?php echo date('d/m/Y', strtotime($event['registration_open'])); ?> - <?php echo date('d/m/Y', strtotime($event['registration_close'])); ?><br>
-                                    <i class="fas fa-hourglass-half me-1"></i> Sisa waktu: <span class="countdown" data-closing="<?php echo $event['registration_close']; ?>"></span>
-                                </small>
+                            <p class="card-text text-muted small">
+                                <?php echo nl2br(htmlspecialchars(mb_substr($event['description'], 0, 100))); ?>...
                             </p>
-                            <?php if ($is_full): ?>
-                                <button class="btn btn-secondary w-100" disabled><i class="fas fa-times-circle me-2"></i>Kuota Penuh</button>
+
+                            <ul class="list-unstyled small text-muted mt-auto mb-3">
+                                <li><i class="fas fa-money-bill me-1 text-primary"></i>
+                                    <?php echo $event['price'] > 0
+                                        ? 'Rp ' . number_format($event['price'], 0, ',', '.')
+                                        : '<span class="text-success fw-bold">Gratis</span>'; ?>
+                                </li>
+                                <li><i class="fas fa-calendar me-1 text-primary"></i>
+                                    <?php echo date('d M Y', strtotime($event['registration_open'])); ?> &ndash;
+                                    <?php echo date('d M Y', strtotime($event['registration_close'])); ?>
+                                </li>
+                                <li><i class="fas fa-hourglass-half me-1 text-primary"></i>
+                                    Sisa waktu:
+                                    <span class="countdown fw-bold"
+                                          data-closing="<?php echo $event['registration_close']; ?>">
+                                    </span>
+                                </li>
+                            </ul>
+
+                            <!-- Progress bar kuota -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span><?php echo $registered; ?> / <?php echo $event['quota']; ?> peserta</span>
+                                    <span><?php echo $percent; ?>%</span>
+                                </div>
+                                <div class="progress" style="height:6px;">
+                                    <div class="progress-bar <?php echo $percent >= 90 ? 'bg-danger' : 'bg-success'; ?>"
+                                         role="progressbar"
+                                         style="width:<?php echo $percent; ?>%"></div>
+                                </div>
+                            </div>
+
+                            <?php if ($isFull): ?>
+                                <button class="btn btn-secondary w-100" disabled>
+                                    <i class="fas fa-times-circle me-1"></i> Kuota Penuh
+                                </button>
                             <?php else: ?>
-                                <a href="register.php?event_id=<?php echo $event['id']; ?>" class="btn btn-primary w-100">Daftar Sekarang</a>
+                                <a href="register.php?event_id=<?php echo $event['id']; ?>"
+                                   class="btn btn-primary w-100">
+                                    <i class="fas fa-edit me-1"></i> Daftar Sekarang
+                                </a>
                             <?php endif; ?>
                         </div>
                     </div>
                 </div>
             <?php endwhile; ?>
 
-            <!-- Tampilkan Pagination -->
-            <?php if ($total_pages > 1): ?>
-            <div class="col-12 mt-4">
-                <nav aria-label="Page navigation">
+            <!-- Pagination -->
+            <?php if ($totalPages > 1): ?>
+            <div class="col-12 mt-2 mb-4">
+                <nav aria-label="Navigasi halaman">
                     <ul class="pagination justify-content-center">
-                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                            <li class="page-item <?php echo ($i == $page) ? 'active' : ''; ?>">
-                                <a class="page-link" href="?page=<?php echo $i; ?>&search=<?php echo urlencode($search); ?>&category=<?php echo urlencode($category); ?>"><?php echo $i; ?></a>
+                        <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
+                            <a class="page-link"
+                               href="?page=<?php echo $page - 1; ?>&search=<?php echo urlencode($search); ?>&category=<?php echo urlencode($category); ?>">
+                               &laquo;
+                            </a>
+                        </li>
+                        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                            <li class="page-item <?php echo ($i === $page) ? 'active' : ''; ?>">
+                                <a class="page-link"
+                                   href="?page=<?php echo $i; ?>&search=<?php echo urlencode($search); ?>&category=<?php echo urlencode($category); ?>">
+                                   <?php echo $i; ?>
+                                </a>
                             </li>
                         <?php endfor; ?>
+                        <li class="page-item <?php echo ($page >= $totalPages) ? 'disabled' : ''; ?>">
+                            <a class="page-link"
+                               href="?page=<?php echo $page + 1; ?>&search=<?php echo urlencode($search); ?>&category=<?php echo urlencode($category); ?>">
+                               &raquo;
+                            </a>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -158,8 +220,17 @@ $total_pages = ceil($total_rows / $limit);
 
         <?php else: ?>
             <div class="col">
-                <div class="alert alert-info text-center">
-                    <i class="fas fa-info-circle me-2"></i> Belum ada event yang tersedia saat ini.
+                <div class="alert alert-info text-center py-5">
+                    <i class="fas fa-calendar-times fa-3x mb-3 d-block"></i>
+                    <h5>Belum ada event yang tersedia</h5>
+                    <p class="mb-0">
+                        <?php if (!empty($search) || !empty($category)): ?>
+                            Tidak ada event yang cocok dengan filter Anda.
+                            <a href="index.php">Tampilkan semua event</a>.
+                        <?php else: ?>
+                            Pantau terus halaman ini untuk event terbaru!
+                        <?php endif; ?>
+                    </p>
                 </div>
             </div>
         <?php endif; ?>
@@ -168,7 +239,6 @@ $total_pages = ceil($total_rows / $limit);
 
 <?php
 $stmt->close();
-$stmt_count->close();
 $conn->close();
 include 'includes/footer.php';
 ?>

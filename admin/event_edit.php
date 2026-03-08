@@ -121,6 +121,10 @@ include '../includes/header.php';
     </div>
 </div>
 
+<?php if ($msg = flash('error')): ?>
+    <div class="alert alert-danger"><?= $msg ?></div>
+<?php endif; ?>
+
 <?php
 $stmt->close();
 $conn->close();

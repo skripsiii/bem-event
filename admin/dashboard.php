@@ -5,18 +5,14 @@ include '../includes/header.php';
 require_once '../config/database.php';
 
 // Statistik
-$total_events = $conn->query("SELECT COUNT(*) as total FROM events")->fetch_assoc()['total'];
-$active_events = $conn->query("SELECT COUNT(*) as total FROM events WHERE is_active = 1")->fetch_assoc()['total'];
-$total_registrations = $conn->query("SELECT COUNT(*) as total FROM registrations")->fetch_assoc()['total'];
-$sql_reg = "SELECT COUNT(*) as total FROM registrations r 
-            JOIN events e ON r.event_id = e.id 
-            WHERE e.is_active = 1";
-$total_registrations = $conn->query("
-    SELECT COUNT(*) as total 
-    FROM registrations r 
+$total_events        = $conn->query("SELECT COUNT(*) as c FROM events")->fetch_assoc()['c'];
+$active_events       = $conn->query("SELECT COUNT(*) as c FROM events WHERE is_active = 1")->fetch_assoc()['c'];
+$total_registrations = $conn->query("SELECT COUNT(*) as c FROM registrations")->fetch_assoc()['c'];
+$active_registrations = $conn->query("
+    SELECT COUNT(*) as c FROM registrations r 
     INNER JOIN events e ON r.event_id = e.id 
     WHERE e.is_active = 1
-")->fetch_assoc()['total'];
+")->fetch_assoc()['c'];
 
 // Event terbaru (5)
 $latest_events = $conn->query("SELECT * FROM events ORDER BY created_at DESC LIMIT 5");
@@ -113,6 +109,10 @@ $latest_events = $conn->query("SELECT * FROM events ORDER BY created_at DESC LIM
         </div>
     </div>
 </div>
+
+<?php if ($msg = flash('error')): ?>
+    <div class="alert alert-danger"><?= $msg ?></div>
+<?php endif; ?>
 
 <?php
 $conn->close();
