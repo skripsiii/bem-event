@@ -59,7 +59,6 @@ $csrf_token=generateCsrfToken();
                                 <small><i class="fas fa-list me-1 text-primary"></i> Kategori: <?php echo htmlspecialchars($event['category']); ?></small>
                             </div>
                             <div class="col-sm-6">
-                                <small><i class="fas fa-money-bill me-1 text-primary"></i> Biaya: <?php echo $event['price'] > 0 ? 'Rp ' . number_format($event['price'], 0, ',', '.') : 'Gratis'; ?></small><br>
                                 <small><i class="fas fa-users me-1 text-primary"></i> Sisa kuota: <span class="fw-bold"><?php echo $remaining; ?></span> dari <?php echo $event['quota']; ?></small>
                             </div>
                         </div>
@@ -136,16 +135,6 @@ $csrf_token=generateCsrfToken();
                             <label for="phone" class="form-label">Nomor Telepon</label>
                             <input type="tel" class="form-control" id="phone" name="phone" required>
                         </div>
-
-                        <?php if ($event['price'] > 0): ?>
-                        <div class="mb-3">
-                            <label for="payment_proof" class="form-label">Upload Bukti Pembayaran</label>
-                            <input type="file" class="form-control" id="payment_proof" name="payment_proof" accept="image/*,.pdf" required>
-                            <small class="text-muted">Format: JPG, PNG, PDF (maks. 2MB)</small>
-                        </div>
-                        <?php else: ?>
-                            <input type="hidden" name="payment_proof" value="">
-                        <?php endif; ?>
 
                         <div class="d-flex gap-3">
                             <a href="index.php" class="btn btn-outline-secondary w-50">

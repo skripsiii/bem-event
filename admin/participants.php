@@ -90,7 +90,6 @@ include '../includes/header.php';
                                 <?php endif; ?>
                                 <th>Telepon</th>
                                 <th>Status Bayar</th>
-                                <th>Bukti</th>
                                 <th>Waktu Daftar</th>
                             </tr>
                         </thead>
@@ -106,25 +105,6 @@ include '../includes/header.php';
                                     <td><?= htmlspecialchars($p['faculty'] ?? '-') ?></td>
                                 <?php endif; ?>
                                 <td><?= htmlspecialchars($p['phone']) ?></td>
-                                <td>
-                                    <?php
-                                    $status = $p['payment_status'] ?? 'pending';
-                                    $badge = 'secondary';
-                                    if ($status == 'paid') $badge = 'warning';
-                                    elseif ($status == 'verified') $badge = 'success';
-                                    ?>
-                                    <span class="badge bg-<?= $badge ?>"><?= ucfirst($status) ?></span>
-                                </td>
-                                <td>
-                                    <?php if (!empty($p['payment_proof'])): ?>
-                                        <a href="<?= BASE_URL ?>uploads/<?= $p['payment_proof'] ?>" target="_blank" class="btn btn-sm btn-info" title="Lihat"><i class="fas fa-eye"></i></a>
-                                        <?php if ($status != 'verified'): ?>
-                                            <a href="verify_payment.php?id=<?= $p['id'] ?>" class="btn btn-sm btn-success" onclick="return confirm('Verifikasi pembayaran?')"><i class="fas fa-check"></i></a>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <span class="text-muted">-</span>
-                                    <?php endif; ?>
-                                </td>
                                 <td><?= date('d/m/Y H:i', strtotime($p['registered_at'])) ?></td>
                             </tr>
                             <?php endwhile; ?>

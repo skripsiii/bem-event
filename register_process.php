@@ -129,51 +129,10 @@ if ($stmt_check->num_rows > 0) {
 }
 $stmt_check->close();
 
-// Proses upload bukti pembayaran
-$payment_proof = null;
-$payment_status = 'pending';
-
-if ($event['price'] > 0) {
-    if (isset($_FILES['payment_proof']) && $_FILES['payment_proof']['error'] == 0) {
-        $target_dir = "uploads/payments/";
-        if (!is_dir($target_dir)) {
-            mkdir($target_dir, 0777, true);
-        }
-        $file_extension = pathinfo($_FILES['payment_proof']['name'], PATHINFO_EXTENSION);
-        $allowed_ext = ['jpg', 'jpeg', 'png', 'pdf'];
-        if (!in_array(strtolower($file_extension), $allowed_ext)) {
-            $_SESSION['error'] = "Format file bukti tidak didukung.";
-            header("Location: register.php?event_id=$event_id");
-            exit;
-        }
-        if ($_FILES['payment_proof']['size'] > 2 * 1024 * 1024) {
-            $_SESSION['error'] = "Ukuran file maksimal 2MB.";
-            header("Location: register.php?event_id=$event_id");
-            exit;
-        }
-        $new_filename = 'payment_' . uniqid() . '.' . $file_extension;
-        $target_file = $target_dir . $new_filename;
-        if (move_uploaded_file($_FILES['payment_proof']['tmp_name'], $target_file)) {
-            $payment_proof = 'payments/' . $new_filename;
-        } else {
-            $_SESSION['error'] = "Gagal mengupload bukti pembayaran.";
-            header("Location: register.php?event_id=$event_id");
-            exit;
-        }
-    } else {
-        $_SESSION['error'] = "Bukti pembayaran wajib diupload.";
-        header("Location: register.php?event_id=$event_id");
-        exit;
-    }
-} else {
-    // Event gratis langsung verified
-    $payment_status = 'verified';
-}
-
 // Simpan ke database
-$sql_insert = "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone, payment_proof, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+$sql_insert = "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 $stmt_insert = $conn->prepare($sql_insert);
-$stmt_insert->bind_param("issssssss", $event_id, $full_name, $email, $institution, $npm, $faculty, $phone, $payment_proof, $payment_status);
+$stmt_insert->bind_param("issssssss", $event_id, $full_name, $email, $institution, $npm, $faculty, $phone);
 
 if ($stmt_insert->execute()) {
     // Kirim email notifikasi

@@ -143,11 +143,6 @@ $result = $stmt->get_result();
                             </p>
 
                             <ul class="list-unstyled small text-muted mt-auto mb-3">
-                                <li><i class="fas fa-money-bill me-1 text-primary"></i>
-                                    <?php echo $event['price'] > 0
-                                        ? 'Rp ' . number_format($event['price'], 0, ',', '.')
-                                        : '<span class="text-success fw-bold">Gratis</span>'; ?>
-                                </li>
                                 <li><i class="fas fa-calendar me-1 text-primary"></i>
                                     <?php echo date('d M Y', strtotime($event['registration_open'])); ?> &ndash;
                                     <?php echo date('d M Y', strtotime($event['registration_close'])); ?>

@@ -39,7 +39,6 @@ $registration_open = $_POST['registration_open'];
 $registration_close = $_POST['registration_close'];
 $is_active = isset($_POST['is_active']) ? 1 : 0;
 $category = $_POST['category'];
-$price = floatval($_POST['price']);
 
 // Validasi
 if (empty($name) || empty($event_type) || empty($quota) || empty($registration_open) || empty($registration_close)) {
@@ -87,10 +86,10 @@ if (isset($_FILES['documentation']) && $_FILES['documentation']['error'] == 0) {
 }
 
 // Query INSERT dengan kolom documentation
-$sql = "INSERT INTO events (name, description, documentation, event_type, category, quota, price, registration_open, registration_close, is_active) 
+$sql = "INSERT INTO events (name, description, documentation, event_type, category, quota, registration_open, registration_close, is_active) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("sssssidssi", $name, $description, $documentation, $event_type, $category, $quota, $price, $registration_open, $registration_close, $is_active);
+$stmt->bind_param("sssssidssi", $name, $description, $documentation, $event_type, $category, $quota, $registration_open, $registration_close, $is_active);
 
 if ($stmt->execute()) {
     $_SESSION['success'] = "Event berhasil ditambahkan.";

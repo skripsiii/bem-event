@@ -17,7 +17,6 @@ $registration_open = $_POST['registration_open'];
 $registration_close = $_POST['registration_close'];
 $is_active = isset($_POST['is_active']) ? 1 : 0;
 $category = $_POST['category'];
-$price = floatval($_POST['price']);
 
 // Ambil dokumentasi lama
 $sql_old = "SELECT documentation FROM events WHERE id = ?";
@@ -89,9 +88,9 @@ if (strtotime($registration_open) > strtotime($registration_close)) {
     exit;
 }
 
-$sql = "UPDATE events SET name=?, description=?, documentation=?, event_type=?, category=?, quota=?, price=?, registration_open=?, registration_close=?, is_active=? WHERE id=?";
+$sql = "UPDATE events SET name=?, description=?, documentation=?, event_type=?, category=?, quota=?, registration_open=?, registration_close=?, is_active=? WHERE id=?";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("sssssidssii", $name, $description, $documentation, $event_type, $category, $quota, $price, $registration_open, $registration_close, $is_active, $id);
+$stmt->bind_param("sssssidssii", $name, $description, $documentation, $event_type, $category, $quota, $registration_open, $registration_close, $is_active, $id);
 
 if ($stmt->execute()) {
     $_SESSION['success'] = "Event berhasil diperbarui.";

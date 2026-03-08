@@ -4,7 +4,11 @@ $page_title = 'Manajemen Event';
 include '../includes/header.php';
 require_once '../config/database.php';
 
-$sql = "SELECT e.*, (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) as registered FROM events e ORDER BY e.created_at DESC";
+$sql = "SELECT e.*, COUNT(r.id) as registered
+FROM events e
+LEFT JOIN registrations r ON r.event_id = e.id
+GROUP BY e.id
+ORDER BY e.created_at DESC";
 $result = $conn->query($sql);
 ?>
 

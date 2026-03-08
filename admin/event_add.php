@@ -64,10 +64,6 @@ include '../includes/header.php';
                                     <option value="Lainnya">Lainnya</option>
                                 </select>
                             </div>
-                            <div class="col-md-6">
-                                <label for="price" class="form-label"><i class="fas fa-money-bill me-2 text-primary"></i>Biaya Pendaftaran (Rp)</label>
-                                <input type="number" class="form-control form-control-lg" id="price" name="price" min="0" step="1000" value="0" placeholder="0 = gratis">
-                            </div>
                         </div>
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
