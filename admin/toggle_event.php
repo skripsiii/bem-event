@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once 'includes/auth.php';
 require_once '../config/database.php';
 
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;

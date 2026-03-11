@@ -10,7 +10,10 @@ if (!isset($_GET['event_id']) || empty($_GET['event_id'])) {
 
 $event_id = intval($_GET['event_id']);
 
-$sql = "SELECT * FROM events WHERE id = ? AND is_active = 1 AND registration_open <= CURDATE() AND registration_close >= CURDATE()";
+$sql = "SELECT * FROM events
+        WHERE id = ? AND is_active = 1
+          AND registration_open <= CURDATE()
+          AND registration_close >= CURDATE()";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $event_id);
 $stmt->execute();
@@ -25,13 +28,11 @@ if ($result->num_rows == 0) {
 $event = $result->fetch_assoc();
 
 // Hitung sisa kuota
-$sql_quota = "SELECT COUNT(*) as total FROM registrations WHERE event_id = ?";
-$stmt_quota = $conn->prepare($sql_quota);
+$stmt_quota = $conn->prepare("SELECT COUNT(*) as total FROM registrations WHERE event_id = ?");
 $stmt_quota->bind_param("i", $event_id);
 $stmt_quota->execute();
-$quota_result = $stmt_quota->get_result();
-$registered = $quota_result->fetch_assoc()['total'];
-$remaining = $event['quota'] - $registered;
+$registered = $stmt_quota->get_result()->fetch_assoc()['total'];
+$remaining  = $event['quota'] - $registered;
 
 if ($remaining <= 0) {
     $_SESSION['error'] = "Maaf, kuota untuk event ini sudah penuh.";
@@ -39,9 +40,8 @@ if ($remaining <= 0) {
     exit;
 }
 
-$csrf_token=generateCsrfToken();
+$csrf_token = generateCsrfToken();
 ?>
-
 
 <div class="container fade-in">
     <div class="row justify-content-center">
@@ -51,23 +51,58 @@ $csrf_token=generateCsrfToken();
                     <h4 class="mb-0"><i class="fas fa-edit me-2"></i>Form Pendaftaran Event</h4>
                 </div>
                 <div class="card-body p-4">
+
+                    <!-- Info Event -->
                     <div class="mb-4 p-3 bg-light rounded">
-                        <h5 class="text-primary mb-2"><?php echo htmlspecialchars($event['name']); ?></h5>
-                        <div class="row">
+                        <h5 class="text-primary mb-3"><?php echo htmlspecialchars($event['name']); ?></h5>
+                        <div class="row g-2">
                             <div class="col-sm-6">
-                                <small><i class="fas fa-tag me-1 text-primary"></i> Tipe: <?php echo ucfirst($event['event_type']); ?></small><br>
-                                <small><i class="fas fa-list me-1 text-primary"></i> Kategori: <?php echo htmlspecialchars($event['category']); ?></small>
+                                <small>
+                                    <i class="fas fa-tag me-1 text-primary"></i>
+                                    <strong>Tipe:</strong> <?php echo ucfirst($event['event_type']); ?>
+                                </small>
                             </div>
                             <div class="col-sm-6">
-                                <small><i class="fas fa-users me-1 text-primary"></i> Sisa kuota: <span class="fw-bold"><?php echo $remaining; ?></span> dari <?php echo $event['quota']; ?></small>
+                                <small>
+                                    <i class="fas fa-list me-1 text-primary"></i>
+                                    <strong>Kategori:</strong> <?php echo htmlspecialchars($event['category']); ?>
+                                </small>
+                            </div>
+                            <!-- Tanggal penyelenggaraan -->
+                            <div class="col-sm-6">
+                                <small>
+                                    <i class="fas fa-calendar-day me-1 text-primary"></i>
+                                    <strong>Diselenggarakan:</strong>
+                                    <?php echo !empty($event['event_date'])
+                                        ? date('d M Y', strtotime($event['event_date']))
+                                        : '-'; ?>
+                                </small>
+                            </div>
+                            <div class="col-sm-6">
+                                <small>
+                                    <i class="fas fa-users me-1 text-primary"></i>
+                                    <strong>Sisa kuota:</strong>
+                                    <span class="fw-bold"><?php echo $remaining; ?></span>
+                                    dari <?php echo $event['quota']; ?>
+                                </small>
+                            </div>
+                            <!-- Periode pendaftaran -->
+                            <div class="col-12">
+                                <small>
+                                    <i class="fas fa-edit me-1 text-primary"></i>
+                                    <strong>Pendaftaran:</strong>
+                                    <?php echo date('d M Y', strtotime($event['registration_open'])); ?>
+                                    &ndash;
+                                    <?php echo date('d M Y', strtotime($event['registration_close'])); ?>
+                                </small>
                             </div>
                         </div>
                     </div>
 
                     <?php if (!empty($event['documentation'])): ?>
                         <div class="mb-4 text-center">
-                            <img src="<?php echo BASE_URL; ?>uploads/<?php echo $event['documentation']; ?>" 
-                                class="img-fluid rounded shadow" alt="Dokumentasi Kegiatan" 
+                            <img src="<?php echo BASE_URL; ?>uploads/<?php echo $event['documentation']; ?>"
+                                class="img-fluid rounded shadow" alt="Dokumentasi Kegiatan"
                                 style="max-height: 300px;">
                             <p class="text-muted mt-2"><i class="fas fa-image me-2"></i>Dokumentasi Kegiatan</p>
                         </div>
@@ -76,10 +111,7 @@ $csrf_token=generateCsrfToken();
                     <?php if (isset($_SESSION['error'])): ?>
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <i class="fas fa-exclamation-circle me-2"></i>
-                            <?php 
-                                echo $_SESSION['error'];
-                                unset($_SESSION['error']);
-                            ?>
+                            <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
@@ -87,28 +119,26 @@ $csrf_token=generateCsrfToken();
                     <?php if (isset($_SESSION['success'])): ?>
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
                             <i class="fas fa-check-circle me-2"></i>
-                            <?php 
-                                echo $_SESSION['success'];
-                                unset($_SESSION['success']);
-                            ?>
+                            <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
 
                     <form id="registerForm" action="register_process.php" method="POST" enctype="multipart/form-data">
-                        
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                        <input type="hidden" name="event_id" value="<?php echo $event_id; ?>">
-                        
+                        <input type="hidden" name="event_id"   value="<?php echo $event_id; ?>">
+
                         <div class="mb-3">
                             <label for="full_name" class="form-label">Nama Lengkap</label>
                             <input type="text" class="form-control" id="full_name" name="full_name" required>
                         </div>
 
                         <div class="mb-3">
-                            <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control" id="email" name="email" required 
-                                placeholder="contoh@email.com">
+                            <label for="email" class="form-label">
+                                Email <span class="text-danger">*</span>
+                            </label>
+                            <input type="email" class="form-control" id="email" name="email"
+                                   required placeholder="contoh@email.com">
                         </div>
 
                         <!-- Field untuk event umum -->
@@ -127,7 +157,8 @@ $csrf_token=generateCsrfToken();
                             </div>
                             <div class="mb-3">
                                 <label for="faculty" class="form-label">Fakultas</label>
-                                <input type="text" class="form-control" id="faculty" name="faculty" value="Fakultas Ilmu Komputer">
+                                <input type="text" class="form-control" id="faculty" name="faculty"
+                                       value="Fakultas Ilmu Komputer">
                             </div>
                         </div>
 

@@ -37,8 +37,12 @@ include '../includes/header.php';
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold text-primary"><i class="fas fa-users me-2"></i>Peserta Event</h2>
         <div>
-            <a href="events.php" class="btn btn-outline-secondary me-2"><i class="fas fa-arrow-left me-2"></i>Kembali</a>
-            <a href="export_excel.php?event_id=..." class="btn btn-success"><i class="fas fa-file-csv me-2"></i>Export CSV </a>
+            <a href="events.php" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-2"></i>Kembali
+            </a>
+            <a href="export_excel.php?event_id=<?php echo $event_id; ?>" class="btn btn-success">
+                <i class="fas fa-file-csv me-2"></i>Export CSV
+            </a>
         </div>
     </div>
 
@@ -63,10 +67,18 @@ include '../includes/header.php';
 
     <!-- Notifikasi -->
     <?php if (isset($_SESSION['success'])): ?>
-        <div class="alert alert-success alert-dismissible fade show"><?php echo $_SESSION['success']; unset($_SESSION['success']); ?></div>
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-check-circle me-2"></i>
+            <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     <?php endif; ?>
     <?php if (isset($_SESSION['error'])): ?>
-        <div class="alert alert-danger alert-dismissible fade show"><?php echo $_SESSION['error']; unset($_SESSION['error']); ?></div>
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-exclamation-circle me-2"></i>
+            <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     <?php endif; ?>
 
     <!-- Tabel Peserta -->
@@ -77,7 +89,7 @@ include '../includes/header.php';
         <div class="card-body">
             <?php if ($participants->num_rows > 0): ?>
                 <div class="table-responsive">
-                    <table id="dataTable" class="table table-bordered table-hover">
+                    <table id="dataTable" class="table table-bordered table-hover w-100">
                         <thead>
                             <tr>
                                 <th>No</th>
@@ -89,19 +101,18 @@ include '../includes/header.php';
                                     <th>Fakultas</th>
                                 <?php endif; ?>
                                 <th>Telepon</th>
-                                <th>Status Bayar</th>
                                 <th>Waktu Daftar</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php $no=1; while($p = $participants->fetch_assoc()): ?>
+                            <?php $no = 1; while ($p = $participants->fetch_assoc()): ?>
                             <tr>
                                 <td><?= $no++ ?></td>
                                 <td><?= htmlspecialchars($p['full_name']) ?></td>
                                 <?php if ($event['event_type'] == 'umum'): ?>
-                                    <td><?= htmlspecialchars($p['institution']) ?></td>
+                                    <td><?= htmlspecialchars($p['institution'] ?? '-') ?></td>
                                 <?php else: ?>
-                                    <td><?= htmlspecialchars($p['npm']) ?></td>
+                                    <td><?= htmlspecialchars($p['npm'] ?? '-') ?></td>
                                     <td><?= htmlspecialchars($p['faculty'] ?? '-') ?></td>
                                 <?php endif; ?>
                                 <td><?= htmlspecialchars($p['phone']) ?></td>
@@ -112,7 +123,9 @@ include '../includes/header.php';
                     </table>
                 </div>
             <?php else: ?>
-                <div class="alert alert-info">Belum ada peserta.</div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>Belum ada peserta yang mendaftar.
+                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -123,6 +136,8 @@ include '../includes/header.php';
 <?php endif; ?>
 
 <?php
+$stmt_event->close();
+$stmt_participants->close();
 $conn->close();
 include '../includes/footer.php';
 ?>

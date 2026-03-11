@@ -8,51 +8,53 @@ if ($_SERVER['REQUEST_METHOD'] != 'POST') {
     exit;
 }
 
-$id = intval($_POST['id']);
-$name = trim($_POST['name']);
-$description = trim($_POST['description']);
-$event_type = $_POST['event_type'];
-$quota = intval($_POST['quota']);
-$registration_open = $_POST['registration_open'];
+$id                 = intval($_POST['id']);
+$name               = trim($_POST['name']);
+$description        = trim($_POST['description']);
+$event_date         = $_POST['event_date'];
+$event_type         = $_POST['event_type'];
+$quota              = intval($_POST['quota']);
+$registration_open  = $_POST['registration_open'];
 $registration_close = $_POST['registration_close'];
-$is_active = isset($_POST['is_active']) ? 1 : 0;
-$category = $_POST['category'];
+$is_active          = isset($_POST['is_active']) ? 1 : 0;
+$category           = $_POST['category'];
 
 // Ambil dokumentasi lama
-$sql_old = "SELECT documentation FROM events WHERE id = ?";
-$stmt_old = $conn->prepare($sql_old);
+$stmt_old = $conn->prepare("SELECT documentation FROM events WHERE id = ?");
 $stmt_old->bind_param("i", $id);
 $stmt_old->execute();
-$result_old = $stmt_old->get_result();
-$old = $result_old->fetch_assoc();
-$old_doc = $old['documentation'];
-$documentation = $old_doc; // default
+$old          = $stmt_old->get_result()->fetch_assoc();
+$documentation = $old['documentation']; // default: tetap pakai yang lama
+$stmt_old->close();
 
-// Cek apakah user ingin menghapus dokumentasi
 $delete_doc = isset($_POST['delete_documentation']) && $_POST['delete_documentation'] == 1;
-
-// Cek apakah ada file baru diupload
 $upload_new = isset($_FILES['documentation']) && $_FILES['documentation']['error'] == 0;
 
 if ($upload_new) {
-    // Proses upload baru
-    $target_dir = "../uploads/";
-    if (!is_dir($target_dir)) {
-        mkdir($target_dir, 0777, true);
-    }
-    $file_extension = pathinfo($_FILES['documentation']['name'], PATHINFO_EXTENSION);
-    $allowed_ext = ['jpg', 'jpeg', 'png', 'gif'];
-    if (!in_array(strtolower($file_extension), $allowed_ext)) {
-        $_SESSION['error'] = "Format file tidak didukung.";
+    $target_dir     = "../uploads/";
+    $allowed_ext    = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $allowed_mime   = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = $finfo->file($_FILES['documentation']['tmp_name']);
+    if (!in_array($mime, $allowed_mime)) {
+        $_SESSION['error'] = "Tipe file tidak didukung.";
         header("Location: event_edit.php?id=$id");
         exit;
     }
+
+    $file_extension = strtolower(pathinfo($_FILES['documentation']['name'], PATHINFO_EXTENSION));
+    if (!in_array($file_extension, $allowed_ext)) {
+        $_SESSION['error'] = "Ekstensi file tidak valid.";
+        header("Location: event_edit.php?id=$id");
+        exit;
+    }
+
     $new_filename = uniqid() . '.' . $file_extension;
-    $target_file = $target_dir . $new_filename;
-    if (move_uploaded_file($_FILES['documentation']['tmp_name'], $target_file)) {
-        // Hapus file lama jika ada (dan tidak sedang dihapus terpisah)
-        if (!empty($old_doc) && file_exists($target_dir . $old_doc)) {
-            unlink($target_dir . $old_doc);
+    if (move_uploaded_file($_FILES['documentation']['tmp_name'], $target_dir . $new_filename)) {
+        // Hapus file lama jika ada
+        if (!empty($old['documentation']) && file_exists($target_dir . $old['documentation'])) {
+            unlink($target_dir . $old['documentation']);
         }
         $documentation = $new_filename;
     } else {
@@ -61,16 +63,15 @@ if ($upload_new) {
         exit;
     }
 } elseif ($delete_doc) {
-    // Hanya hapus file lama
-    if (!empty($old_doc) && file_exists("../uploads/" . $old_doc)) {
-        unlink("../uploads/" . $old_doc);
+    if (!empty($old['documentation']) && file_exists("../uploads/" . $old['documentation'])) {
+        unlink("../uploads/" . $old['documentation']);
     }
     $documentation = null;
 }
-// Jika tidak upload baru dan tidak hapus, dokumentasi tetap seperti sebelumnya
 
 // Validasi
-if (empty($name) || empty($event_type) || empty($quota) || empty($registration_open) || empty($registration_close)) {
+if (empty($name) || empty($event_type) || empty($quota) ||
+    empty($registration_open) || empty($registration_close) || empty($event_date)) {
     $_SESSION['error'] = "Semua field wajib diisi.";
     header("Location: event_edit.php?id=$id");
     exit;
@@ -83,14 +84,23 @@ if ($quota < 1) {
 }
 
 if (strtotime($registration_open) > strtotime($registration_close)) {
-    $_SESSION['error'] = "Tanggal buka tidak boleh lebih dari tanggal tutup.";
+    $_SESSION['error'] = "Tanggal buka pendaftaran tidak boleh lebih dari tanggal tutup.";
     header("Location: event_edit.php?id=$id");
     exit;
 }
 
-$sql = "UPDATE events SET name=?, description=?, documentation=?, event_type=?, category=?, quota=?, registration_open=?, registration_close=?, is_active=? WHERE id=?";
+$sql  = "UPDATE events
+         SET name=?, description=?, event_date=?, documentation=?,
+             event_type=?, category=?, quota=?,
+             registration_open=?, registration_close=?, is_active=?
+         WHERE id=?";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("sssssidssii", $name, $description, $documentation, $event_type, $category, $quota, $registration_open, $registration_close, $is_active, $id);
+$stmt->bind_param("ssssssissii",
+    $name, $description, $event_date, $documentation,
+    $event_type, $category, $quota,
+    $registration_open, $registration_close, $is_active,
+    $id
+);
 
 if ($stmt->execute()) {
     $_SESSION['success'] = "Event berhasil diperbarui.";
@@ -102,4 +112,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>
