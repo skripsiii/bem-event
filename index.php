@@ -15,6 +15,7 @@ $search   = isset($_GET['search'])   ? trim($_GET['search'])   : '';
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
 
 // ===== BUILD WHERE CLAUSE =====
+// Selalu sertakan is_active = 1 agar event nonaktif tidak muncul
 $where      = "e.is_active = 1 AND e.registration_open <= ? AND e.registration_close >= ?";
 $mainTypes  = "ss";
 $mainParams = [$today, $today];
@@ -33,24 +34,28 @@ if (!empty($category)) {
     $mainParams[]  = $category;
 }
 
-// ===== HITUNG TOTAL PAGINATION =====
-$stmtCount = $conn->prepare("SELECT COUNT(*) as total FROM events e WHERE $where");
+// ===== HITUNG TOTAL UNTUK PAGINATION (pakai params yang sama) =====
+$countSql    = "SELECT COUNT(*) as total FROM events e WHERE $where";
+$stmtCount   = $conn->prepare($countSql);
 $stmtCount->bind_param($mainTypes, ...$mainParams);
 $stmtCount->execute();
-$totalRows  = $stmtCount->get_result()->fetch_assoc()['total'];
-$totalPages = ceil($totalRows / $limit);
+$totalRows   = $stmtCount->get_result()->fetch_assoc()['total'];
+$totalPages  = ceil($totalRows / $limit);
 $stmtCount->close();
 
-// ===== QUERY UTAMA =====
+// ===== QUERY UTAMA: tambahkan LIMIT & OFFSET di akhir =====
 $mainSql = "SELECT e.*,
                 (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) AS registered
             FROM events e
             WHERE $where
-            ORDER BY e.event_date ASC
+            ORDER BY e.registration_close ASC
             LIMIT ? OFFSET ?";
 
+$finalTypes    = $mainTypes . "ii";
+$finalParams   = array_merge($mainParams, [$limit, $offset]);
+
 $stmt = $conn->prepare($mainSql);
-$stmt->bind_param($mainTypes . "ii", ...array_merge($mainParams, [$limit, $offset]));
+$stmt->bind_param($finalTypes, ...$finalParams);
 $stmt->execute();
 $result = $stmt->get_result();
 ?>
@@ -75,7 +80,10 @@ $result = $stmt->get_result();
                 <div class="col-md-4">
                     <select name="category" class="form-select">
                         <option value="">Semua Kategori</option>
-                        <?php foreach (['Seminar','Workshop','Lomba','Sosial','Pelatihan','Lainnya'] as $cat): ?>
+                        <?php
+                        $categories = ['Seminar','Workshop','Lomba','Sosial','Pelatihan','Lainnya'];
+                        foreach ($categories as $cat):
+                        ?>
                             <option value="<?php echo $cat; ?>"
                                 <?php echo ($category === $cat) ? 'selected' : ''; ?>>
                                 <?php echo $cat; ?>
@@ -135,26 +143,12 @@ $result = $stmt->get_result();
                             </p>
 
                             <ul class="list-unstyled small text-muted mt-auto mb-3">
-                                <!-- Tanggal penyelenggaraan -->
-                                <li class="mb-1">
-                                    <i class="fas fa-calendar-day me-1 text-primary"></i>
-                                    <strong>Diselenggarakan:</strong>
-                                    <?php echo !empty($event['event_date'])
-                                        ? date('d M Y', strtotime($event['event_date']))
-                                        : '-'; ?>
-                                </li>
-                                <!-- Periode pendaftaran -->
-                                <li class="mb-1">
-                                    <i class="fas fa-edit me-1 text-primary"></i>
-                                    <strong>Pendaftaran:</strong>
-                                    <?php echo date('d M Y', strtotime($event['registration_open'])); ?>
-                                    &ndash;
+                                <li><i class="fas fa-calendar me-1 text-primary"></i>
+                                    <?php echo date('d M Y', strtotime($event['registration_open'])); ?> &ndash;
                                     <?php echo date('d M Y', strtotime($event['registration_close'])); ?>
                                 </li>
-                                <!-- Countdown tutup pendaftaran -->
-                                <li>
-                                    <i class="fas fa-hourglass-half me-1 text-primary"></i>
-                                    Tutup dalam:
+                                <li><i class="fas fa-hourglass-half me-1 text-primary"></i>
+                                    Sisa waktu:
                                     <span class="countdown fw-bold"
                                           data-closing="<?php echo $event['registration_close']; ?>">
                                     </span>
