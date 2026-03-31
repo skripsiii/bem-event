@@ -11,7 +11,6 @@ if (file_exists($autoload)) {
 }
 
 use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
 // Load konfigurasi mail

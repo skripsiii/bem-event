@@ -27,11 +27,11 @@ require_once __DIR__ . '/../config/database.php';
      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: #3a86ff">
         <div class="container">
-            <a class="navbar-brand" href="<?php echo BASE_URL; ?>index.php">
-                 <img src="<?php echo BASE_URL; ?>assets/img/logo-bem.png" alt="Logo BEM Fasilkom Unsika">
-                 BEM Fasilkom Unsika
+            <a class=" navbar-brand d-flex align-items-center" href="<?php echo BASE_URL; ?>index.php">
+                 <img src="<?php echo BASE_URL; ?>assets/img/logo-bem.png" alt="Logo BEM Fasilkom Unsika" style="height: 50px;">
+                 <span>BEM Fasilkom Unsika</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -57,4 +57,3 @@ require_once __DIR__ . '/../config/database.php';
             </div>
         </div>
     </nav>
-    <main class="py-4">

@@ -1,6 +1,6 @@
 </main>
 
-<footer>
+<footer class="mt-auto py-4">
   <div class="container">
     <div class="d-flex flex-column flex-sm-row align-items-center justify-content-between gap-2">
       <div class="d-flex align-items-center gap-2">

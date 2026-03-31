@@ -1,101 +1,135 @@
 <?php
-session_start();
-require_once 'includes/auth.php';
-require_once '../config/database.php';
+/* ════════════════════════════════════════════════════════════════
+   admin/event_update.php — Perbarui Event (JSON Response)
+   ════════════════════════════════════════════════════════════════ */
 
-if ($_SERVER['REQUEST_METHOD'] != 'POST') {
-    header('Location: events.php');
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'message' => 'Sesi tidak valid. Silakan login kembali.', 'expired' => true]);
     exit;
 }
 
-$id                 = intval($_POST['id']);
-$name               = trim($_POST['name']);
-$description        = trim($_POST['description']);
-$event_date         = $_POST['event_date'];
-$event_type         = $_POST['event_type'];
-$quota              = intval($_POST['quota']);
-$registration_open  = $_POST['registration_open'];
-$registration_close = $_POST['registration_close'];
+$_SESSION['last_activity'] = time();
+
+require_once '../config/database.php';
+
+$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+       && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+if ($isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+}
+
+function respondUpdate(bool $success, string $message, bool $isAjax, int $id = 0): void
+{
+    if ($isAjax) {
+        echo json_encode(['success' => $success, 'message' => $message]);
+        exit;
+    }
+    $_SESSION[$success ? 'success' : 'error'] = $message;
+    header('Location: ' . ($success ? 'events.php' : "event_edit.php?id={$id}"));
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    respondUpdate(false, 'Metode request tidak valid.', $isAjax);
+}
+
+/* ── Input ── */
+$id                 = intval($_POST['id'] ?? 0);
+$name               = trim($_POST['name'] ?? '');
+$description        = trim($_POST['description'] ?? '');
+$event_date         = $_POST['event_date'] ?? '';
+$event_type         = $_POST['event_type'] ?? '';
+$quota              = intval($_POST['quota'] ?? 0);
+$registration_open  = $_POST['registration_open'] ?? '';
+$registration_close = $_POST['registration_close'] ?? '';
 $is_active          = isset($_POST['is_active']) ? 1 : 0;
-$category           = $_POST['category'];
+$category           = $_POST['category'] ?? '';
 
-// Ambil dokumentasi lama
-$stmt_old = $conn->prepare("SELECT documentation FROM events WHERE id = ?");
-$stmt_old->bind_param("i", $id);
-$stmt_old->execute();
-$old          = $stmt_old->get_result()->fetch_assoc();
-$documentation = $old['documentation']; // default: tetap pakai yang lama
-$stmt_old->close();
+if (!$id) {
+    respondUpdate(false, 'ID event tidak valid.', $isAjax);
+}
 
-$delete_doc = isset($_POST['delete_documentation']) && $_POST['delete_documentation'] == 1;
-$upload_new = isset($_FILES['documentation']) && $_FILES['documentation']['error'] == 0;
+/* ── Validasi ── */
+if (empty($name) || empty($event_type) || empty($category) || empty($event_date)
+    || empty($registration_open) || empty($registration_close)) {
+    respondUpdate(false, 'Semua field bertanda wajib harus diisi.', $isAjax, $id);
+}
 
-if ($upload_new) {
-    $target_dir     = "../uploads/";
-    $allowed_ext    = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    $allowed_mime   = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+if ($quota < 1) {
+    respondUpdate(false, 'Kuota peserta harus minimal 1.', $isAjax, $id);
+}
+
+if (strtotime($registration_open) > strtotime($registration_close)) {
+    respondUpdate(false, 'Tanggal buka pendaftaran tidak boleh lebih dari tanggal tutup.', $isAjax, $id);
+}
+
+/* ── Ambil dokumentasi lama ── */
+$stmtOld = $conn->prepare('SELECT documentation FROM events WHERE id = ?');
+$stmtOld->bind_param('i', $id);
+$stmtOld->execute();
+$old           = $stmtOld->get_result()->fetch_assoc();
+$stmtOld->close();
+
+if (!$old) {
+    respondUpdate(false, 'Event tidak ditemukan.', $isAjax, $id);
+}
+
+$documentation = $old['documentation']; // default: tetap pakai gambar lama
+$deleteDoc     = !empty($_POST['delete_documentation']) && (int) $_POST['delete_documentation'] === 1;
+$uploadNew     = isset($_FILES['documentation']) && $_FILES['documentation']['error'] === UPLOAD_ERR_OK;
+
+/* ── Proses gambar ── */
+if ($uploadNew) {
+    $targetDir   = '../uploads/';
+    $allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    $allowedExt  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime  = $finfo->file($_FILES['documentation']['tmp_name']);
-    if (!in_array($mime, $allowed_mime)) {
-        $_SESSION['error'] = "Tipe file tidak didukung.";
-        header("Location: event_edit.php?id=$id");
-        exit;
+    if (!in_array($mime, $allowedMime)) {
+        respondUpdate(false, 'Format file tidak didukung.', $isAjax, $id);
+    }
+    if ($_FILES['documentation']['size'] > 2 * 1024 * 1024) {
+        respondUpdate(false, 'Ukuran file maksimal 2MB.', $isAjax, $id);
+    }
+    $ext = strtolower(pathinfo($_FILES['documentation']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowedExt)) {
+        respondUpdate(false, 'Ekstensi file tidak valid.', $isAjax, $id);
     }
 
-    $file_extension = strtolower(pathinfo($_FILES['documentation']['name'], PATHINFO_EXTENSION));
-    if (!in_array($file_extension, $allowed_ext)) {
-        $_SESSION['error'] = "Ekstensi file tidak valid.";
-        header("Location: event_edit.php?id=$id");
-        exit;
-    }
-
-    $new_filename = uniqid() . '.' . $file_extension;
-    if (move_uploaded_file($_FILES['documentation']['tmp_name'], $target_dir . $new_filename)) {
-        // Hapus file lama jika ada
-        if (!empty($old['documentation']) && file_exists($target_dir . $old['documentation'])) {
-            unlink($target_dir . $old['documentation']);
+    $filename = 'ev_' . uniqid('', true) . '.' . $ext;
+    if (move_uploaded_file($_FILES['documentation']['tmp_name'], $targetDir . $filename)) {
+        // Hapus file lama
+        if (!empty($old['documentation']) && file_exists($targetDir . $old['documentation'])) {
+            @unlink($targetDir . $old['documentation']);
         }
-        $documentation = $new_filename;
+        $documentation = $filename;
     } else {
-        $_SESSION['error'] = "Gagal mengupload gambar.";
-        header("Location: event_edit.php?id=$id");
-        exit;
+        respondUpdate(false, 'Gagal mengupload gambar baru.', $isAjax, $id);
     }
-} elseif ($delete_doc) {
-    if (!empty($old['documentation']) && file_exists("../uploads/" . $old['documentation'])) {
-        unlink("../uploads/" . $old['documentation']);
+} elseif ($deleteDoc) {
+    if (!empty($old['documentation']) && file_exists('../uploads/' . $old['documentation'])) {
+        @unlink('../uploads/' . $old['documentation']);
     }
     $documentation = null;
 }
 
-// Validasi
-if (empty($name) || empty($event_type) || empty($quota) ||
-    empty($registration_open) || empty($registration_close) || empty($event_date)) {
-    $_SESSION['error'] = "Semua field wajib diisi.";
-    header("Location: event_edit.php?id=$id");
-    exit;
-}
-
-if ($quota < 1) {
-    $_SESSION['error'] = "Kuota harus minimal 1.";
-    header("Location: event_edit.php?id=$id");
-    exit;
-}
-
-if (strtotime($registration_open) > strtotime($registration_close)) {
-    $_SESSION['error'] = "Tanggal buka pendaftaran tidak boleh lebih dari tanggal tutup.";
-    header("Location: event_edit.php?id=$id");
-    exit;
-}
-
+/* ── Update DB ── */
 $sql  = "UPDATE events
-         SET name=?, description=?, event_date=?, documentation=?,
-             event_type=?, category=?, quota=?,
-             registration_open=?, registration_close=?, is_active=?
-         WHERE id=?";
+            SET name=?, description=?, event_date=?, documentation=?,
+                event_type=?, category=?, quota=?,
+                registration_open=?, registration_close=?, is_active=?
+          WHERE id=?";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("ssssssissii",
+// s=name, s=description, s=event_date, s=documentation, s=event_type, s=category,
+// i=quota, s=registration_open, s=registration_close, i=is_active, i=id
+$stmt->bind_param('ssssssissii',
     $name, $description, $event_date, $documentation,
     $event_type, $category, $quota,
     $registration_open, $registration_close, $is_active,
@@ -103,12 +137,12 @@ $stmt->bind_param("ssssssissii",
 );
 
 if ($stmt->execute()) {
-    $_SESSION['success'] = "Event berhasil diperbarui.";
-    header('Location: events.php');
+    $stmt->close();
+    $conn->close();
+    respondUpdate(true, "Event \"{$name}\" berhasil diperbarui.", $isAjax, $id);
 } else {
-    $_SESSION['error'] = "Gagal memperbarui event: " . $conn->error;
-    header("Location: event_edit.php?id=$id");
+    $errMsg = $conn->error;
+    $stmt->close();
+    $conn->close();
+    respondUpdate(false, 'Gagal memperbarui event: ' . $errMsg, $isAjax, $id);
 }
-
-$stmt->close();
-$conn->close();

@@ -1,30 +1,76 @@
 <?php
-require_once 'includes/auth.php';
+/* ════════════════════════════════════════════════════════════════
+   admin/event_delete.php — Hapus Event (JSON Response)
+   ════════════════════════════════════════════════════════════════ */
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'message' => 'Tidak terotorisasi.']);
+    exit;
+}
+
+$_SESSION['last_activity'] = time();
+
 require_once '../config/database.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: events.php'); exit;
-}
-if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
-    $_SESSION['error'] = "Token tidak valid.";
-    header('Location: events.php'); exit;
-}
-$id = intval($_POST['id']);
+$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+       && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-// Hapus event (registrasi akan terhapus otomatis karena ON DELETE CASCADE)
-$sql = "DELETE FROM events WHERE id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $id);
+if ($isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+}
+
+function respondDelete(bool $success, string $message, bool $isAjax): void
+{
+    if ($isAjax) {
+        echo json_encode(['success' => $success, 'message' => $message]);
+        exit;
+    }
+    $_SESSION[$success ? 'success' : 'error'] = $message;
+    header('Location: events.php');
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    respondDelete(false, 'Metode request tidak valid.', $isAjax);
+}
+
+if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+    respondDelete(false, 'Token keamanan tidak valid. Silakan muat ulang halaman.', $isAjax);
+}
+
+$id = intval($_POST['id'] ?? 0);
+if (!$id) {
+    respondDelete(false, 'ID event tidak valid.', $isAjax);
+}
+
+/* ── Ambil nama event untuk pesan konfirmasi ── */
+$stmtName = $conn->prepare('SELECT name FROM events WHERE id = ?');
+$stmtName->bind_param('i', $id);
+$stmtName->execute();
+$eventRow = $stmtName->get_result()->fetch_assoc();
+$stmtName->close();
+
+if (!$eventRow) {
+    respondDelete(false, 'Event tidak ditemukan.', $isAjax);
+}
+$eventName = $eventRow['name'];
+
+/* ── Hapus event (registrasi ikut terhapus via ON DELETE CASCADE) ── */
+$stmt = $conn->prepare('DELETE FROM events WHERE id = ?');
+$stmt->bind_param('i', $id);
 
 if ($stmt->execute()) {
-    $_SESSION['success'] = "Event berhasil dihapus.";
+    $stmt->close();
+    $conn->close();
+    respondDelete(true, "Event \"{$eventName}\" berhasil dihapus.", $isAjax);
 } else {
-    $_SESSION['error'] = "Gagal menghapus event: " . $conn->error;
+    $errMsg = $conn->error;
+    $stmt->close();
+    $conn->close();
+    respondDelete(false, 'Gagal menghapus event: ' . $errMsg, $isAjax);
 }
-
-$stmt->close();
-$conn->close();
-header('Location: events.php');
-exit;
-
-?>

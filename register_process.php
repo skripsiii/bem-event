@@ -1,160 +1,180 @@
 <?php
-session_start();
+/* ════════════════════════════════════════════════════════════════
+   register_process.php — Proses Pendaftaran Event
+   Mengembalikan JSON untuk AJAX, redirect untuk non-AJAX (fallback)
+   ════════════════════════════════════════════════════════════════ */
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require_once 'config/database.php';
 
-if ($_SERVER['REQUEST_METHOD'] != 'POST') {
-    header('Location: index.php');
+/* ── Deteksi apakah request dari AJAX ── */
+$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+       && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+if ($isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+}
+
+/* ── Helper: kirim respons dan exit ── */
+function respond(bool $success, string $message, bool $isAjax): void
+{
+    if ($isAjax) {
+        echo json_encode(['success' => $success, 'message' => $message]);
+        exit;
+    }
+    // Fallback non-AJAX
+    $_SESSION[$success ? 'success' : 'error'] = $message;
+    header('Location: ' . ($success ? 'index.php' : 'register.php?event_id=' . (int) ($_POST['event_id'] ?? 0)));
     exit;
 }
 
-// CSRF check
+/* ═══════════════════════════════════════
+   Validasi Method & CSRF
+═══════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    respond(false, 'Metode request tidak valid.', $isAjax);
+}
+
 if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
-    $_SESSION['error'] = "Token CSRF tidak valid.";
-    header('Location: index.php');
-    exit;
+    respond(false, 'Token keamanan tidak valid. Silakan muat ulang halaman dan coba lagi.', $isAjax);
 }
 
-$event_id  = intval($_POST['event_id']);
-$full_name = trim($_POST['full_name']);
-$email     = trim($_POST['email']);
-$phone     = trim($_POST['phone']);
+/* ═══════════════════════════════════════
+   Ambil & Sanitasi Input
+═══════════════════════════════════════ */
+$event_id  = intval($_POST['event_id'] ?? 0);
+$full_name = trim($_POST['full_name'] ?? '');
+$email     = trim($_POST['email'] ?? '');
+$phone     = trim($_POST['phone'] ?? '');
 
-// Validasi dasar
+/* ── Validasi dasar ── */
+if (!$event_id) {
+    respond(false, 'ID event tidak valid.', $isAjax);
+}
+
 if (empty($full_name) || empty($email) || empty($phone)) {
-    $_SESSION['error'] = "Nama, email, dan nomor telepon wajib diisi.";
-    header("Location: register.php?event_id=$event_id");
-    exit;
+    respond(false, 'Nama lengkap, email, dan nomor telepon wajib diisi.', $isAjax);
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    $_SESSION['error'] = "Format email tidak valid.";
-    header("Location: register.php?event_id=$event_id");
-    exit;
+    respond(false, 'Format email tidak valid.', $isAjax);
 }
 
 if (!preg_match('/^[0-9]{10,13}$/', $phone)) {
-    $_SESSION['error'] = "Nomor telepon harus 10–13 digit angka.";
-    header("Location: register.php?event_id=$event_id");
-    exit;
+    respond(false, 'Nomor telepon harus 10–13 digit angka (tanpa tanda +/-/spasi).', $isAjax);
 }
 
-// Ambil data event dari database
-$sql  = "SELECT * FROM events
-         WHERE id = ? AND is_active = 1
-           AND registration_open <= CURDATE()
-           AND registration_close >= CURDATE()";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $event_id);
-$stmt->execute();
-$result = $stmt->get_result();
+/* ═══════════════════════════════════════
+   Ambil Data Event
+═══════════════════════════════════════ */
+$stmtEv = $conn->prepare(
+    "SELECT * FROM events
+      WHERE id = ? AND is_active = 1
+        AND registration_open  <= CURDATE()
+        AND registration_close >= CURDATE()"
+);
+$stmtEv->bind_param('i', $event_id);
+$stmtEv->execute();
+$event = $stmtEv->get_result()->fetch_assoc();
+$stmtEv->close();
 
-if ($result->num_rows == 0) {
-    $_SESSION['error'] = "Event tidak ditemukan atau sudah ditutup.";
-    header('Location: index.php');
-    exit;
+if (!$event) {
+    respond(false, 'Event tidak ditemukan atau pendaftaran sudah ditutup.', $isAjax);
 }
 
-$event      = $result->fetch_assoc();
 $event_type = $event['event_type'];
-$quota      = $event['quota'];
 
-// Rate limiting (cek IP)
+/* ═══════════════════════════════════════
+   Rate Limiting (per IP)
+═══════════════════════════════════════ */
 $ip = $_SERVER['REMOTE_ADDR'];
 if (!checkRateLimit($ip, $conn)) {
-    $_SESSION['error'] = "Terlalu banyak pendaftaran dari IP Anda. Silakan coba lagi nanti.";
-    header("Location: index.php");
-    exit;
+    respond(false, 'Terlalu banyak pendaftaran dari IP Anda dalam 1 jam. Silakan coba lagi nanti.', $isAjax);
 }
 
-// Validasi berdasarkan tipe event
+/* ═══════════════════════════════════════
+   Validasi Spesifik Tipe Event
+═══════════════════════════════════════ */
 $institution = null;
 $npm         = null;
 $faculty     = null;
 
-if ($event_type == 'umum') {
+if ($event_type === 'umum') {
     $institution = trim($_POST['institution'] ?? '');
     if (empty($institution)) {
-        $_SESSION['error'] = "Instansi wajib diisi.";
-        header("Location: register.php?event_id=$event_id");
-        exit;
+        respond(false, 'Nama instansi/asal wajib diisi untuk event umum.', $isAjax);
     }
 } else {
     $npm    = trim($_POST['npm'] ?? '');
     $faculty = trim($_POST['faculty'] ?? '');
+
     if (empty($npm)) {
-        $_SESSION['error'] = "NPM wajib diisi.";
-        header("Location: register.php?event_id=$event_id");
-        exit;
-    }
-    if (empty($faculty)) {
-        $faculty = 'Fakultas Ilmu Komputer';
+        respond(false, 'NPM wajib diisi untuk event internal.', $isAjax);
     }
     if (!preg_match('/^[0-9]{13}$/', $npm)) {
-        $_SESSION['error'] = "NPM harus 13 digit angka.";
-        header("Location: register.php?event_id=$event_id");
-        exit;
+        respond(false, 'NPM harus tepat 13 digit angka.', $isAjax);
+    }
+    if (empty($faculty)) {
+        respond(false, 'Fakultas wajib diisi untuk event internal.', $isAjax);
     }
 }
 
-// Cek kuota
-$stmt_count = $conn->prepare("SELECT COUNT(*) as total FROM registrations WHERE event_id = ?");
-$stmt_count->bind_param("i", $event_id);
-$stmt_count->execute();
-$registered = $stmt_count->get_result()->fetch_assoc()['total'];
-$stmt_count->close();
+/* ═══════════════════════════════════════
+   Cek Sisa Kuota
+═══════════════════════════════════════ */
+$stmtCount = $conn->prepare('SELECT COUNT(*) AS total FROM registrations WHERE event_id = ?');
+$stmtCount->bind_param('i', $event_id);
+$stmtCount->execute();
+$registered = (int) $stmtCount->get_result()->fetch_assoc()['total'];
+$stmtCount->close();
 
-if ($registered >= $quota) {
-    $_SESSION['error'] = "Maaf, kuota untuk event ini sudah penuh.";
-    header("Location: register.php?event_id=$event_id");
-    exit;
+if ($registered >= (int) $event['quota']) {
+    respond(false, 'Maaf, kuota untuk event ini sudah penuh.', $isAjax);
 }
 
-// Cek duplikasi
-if ($event_type == 'internal') {
-    $sql_check = "SELECT id FROM registrations WHERE event_id = ? AND npm = ?";
-    $stmt_check = $conn->prepare($sql_check);
-    $stmt_check->bind_param("is", $event_id, $npm);
+/* ═══════════════════════════════════════
+   Cek Duplikasi Pendaftaran
+═══════════════════════════════════════ */
+if ($event_type === 'internal') {
+    $stmtDup = $conn->prepare('SELECT id FROM registrations WHERE event_id = ? AND npm = ?');
+    $stmtDup->bind_param('is', $event_id, $npm);
 } else {
-    $sql_check = "SELECT id FROM registrations WHERE event_id = ? AND email = ?";
-    $stmt_check = $conn->prepare($sql_check);
-    $stmt_check->bind_param("is", $event_id, $email);
+    $stmtDup = $conn->prepare('SELECT id FROM registrations WHERE event_id = ? AND email = ?');
+    $stmtDup->bind_param('is', $event_id, $email);
 }
-$stmt_check->execute();
-$stmt_check->store_result();
-if ($stmt_check->num_rows > 0) {
-    $_SESSION['error'] = "Anda sudah terdaftar pada event ini.";
-    header("Location: register.php?event_id=$event_id");
-    exit;
+$stmtDup->execute();
+$stmtDup->store_result();
+if ($stmtDup->num_rows > 0) {
+    respond(false, 'Anda sudah terdaftar pada event ini sebelumnya.', $isAjax);
 }
-$stmt_check->close();
+$stmtDup->close();
 
-// Simpan ke database (sertakan ip_address bila kolom sudah ada)
-$hasIpCol = $conn->query("SHOW COLUMNS FROM registrations LIKE 'ip_address'");
-if ($hasIpCol && $hasIpCol->num_rows > 0) {
-    $sql_insert = "INSERT INTO registrations
-                   (event_id, full_name, email, institution, npm, faculty, phone, ip_address)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-    $stmt_insert = $conn->prepare($sql_insert);
-    $stmt_insert->bind_param("isssssss",
-        $event_id, $full_name, $email, $institution, $npm, $faculty, $phone, $ip);
+/* ═══════════════════════════════════════
+   Simpan Pendaftaran ke Database
+═══════════════════════════════════════ */
+$hasIpCol = (bool) $conn->query("SHOW COLUMNS FROM registrations LIKE 'ip_address'")->num_rows;
+
+if ($hasIpCol) {
+    $stmtIns = $conn->prepare(
+        "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone, ip_address)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    $stmtIns->bind_param('isssssss', $event_id, $full_name, $email, $institution, $npm, $faculty, $phone, $ip);
 } else {
-    $sql_insert = "INSERT INTO registrations
-                   (event_id, full_name, email, institution, npm, faculty, phone)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)";
-    $stmt_insert = $conn->prepare($sql_insert);
-    $stmt_insert->bind_param("issssss",
-        $event_id, $full_name, $email, $institution, $npm, $faculty, $phone);
+    $stmtIns = $conn->prepare(
+        "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone)
+         VALUES (?, ?, ?, ?, ?, ?, ?)"
+    );
+    $stmtIns->bind_param('issssss', $event_id, $full_name, $email, $institution, $npm, $faculty, $phone);
 }
 
-if ($stmt_insert->execute()) {
-    // Kirim email konfirmasi (non-blocking: error email tidak gagalkan pendaftaran)
+if ($stmtIns->execute()) {
+    // Kirim email konfirmasi (error email tidak gagalkan pendaftaran)
     sendRegistrationEmail($email, $full_name, $event['name'], $event);
-
-    $_SESSION['success'] = "Pendaftaran berhasil! Email konfirmasi telah dikirim ke <strong>{$email}</strong>.";
-    header("Location: index.php");
-    exit;
+    respond(true, "Pendaftaran berhasil! Email konfirmasi telah dikirim ke {$email}.", $isAjax);
 } else {
-    $_SESSION['error'] = "Terjadi kesalahan. Silakan coba lagi.";
-    header("Location: register.php?event_id=$event_id");
-    exit;
+    respond(false, 'Terjadi kesalahan sistem saat menyimpan data. Silakan coba lagi.', $isAjax);
 }
