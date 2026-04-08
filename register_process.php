@@ -108,7 +108,7 @@ if ($event_type === 'umum') {
         respond(false, 'Nama instansi/asal wajib diisi untuk event umum.', $isAjax);
     }
 } else {
-    $npm    = trim($_POST['npm'] ?? '');
+    $npm     = trim($_POST['npm'] ?? '');
     $faculty = trim($_POST['faculty'] ?? '');
 
     if (empty($npm)) {
@@ -123,58 +123,71 @@ if ($event_type === 'umum') {
 }
 
 /* ═══════════════════════════════════════
-   Cek Sisa Kuota
+   Cek Kuota, Duplikasi & Simpan
+   — dalam satu transaksi dengan row locking
+     untuk mencegah race condition overbooking
 ═══════════════════════════════════════ */
-$stmtCount = $conn->prepare('SELECT COUNT(*) AS total FROM registrations WHERE event_id = ?');
-$stmtCount->bind_param('i', $event_id);
-$stmtCount->execute();
-$registered = (int) $stmtCount->get_result()->fetch_assoc()['total'];
-$stmtCount->close();
+$conn->begin_transaction();
 
-if ($registered >= (int) $event['quota']) {
-    respond(false, 'Maaf, kuota untuk event ini sudah penuh.', $isAjax);
-}
-
-/* ═══════════════════════════════════════
-   Cek Duplikasi Pendaftaran
-═══════════════════════════════════════ */
-if ($event_type === 'internal') {
-    $stmtDup = $conn->prepare('SELECT id FROM registrations WHERE event_id = ? AND npm = ?');
-    $stmtDup->bind_param('is', $event_id, $npm);
-} else {
-    $stmtDup = $conn->prepare('SELECT id FROM registrations WHERE event_id = ? AND email = ?');
-    $stmtDup->bind_param('is', $event_id, $email);
-}
-$stmtDup->execute();
-$stmtDup->store_result();
-if ($stmtDup->num_rows > 0) {
-    respond(false, 'Anda sudah terdaftar pada event ini sebelumnya.', $isAjax);
-}
-$stmtDup->close();
-
-/* ═══════════════════════════════════════
-   Simpan Pendaftaran ke Database
-═══════════════════════════════════════ */
-$hasIpCol = (bool) $conn->query("SHOW COLUMNS FROM registrations LIKE 'ip_address'")->num_rows;
-
-if ($hasIpCol) {
-    $stmtIns = $conn->prepare(
-        "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone, ip_address)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+try {
+    /* ── Cek sisa kuota (FOR UPDATE mengunci baris sampai transaksi selesai) ── */
+    $stmtCount = $conn->prepare(
+        'SELECT COUNT(*) AS total FROM registrations WHERE event_id = ? FOR UPDATE'
     );
-    $stmtIns->bind_param('isssssss', $event_id, $full_name, $email, $institution, $npm, $faculty, $phone, $ip);
-} else {
-    $stmtIns = $conn->prepare(
-        "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone)
-         VALUES (?, ?, ?, ?, ?, ?, ?)"
-    );
-    $stmtIns->bind_param('issssss', $event_id, $full_name, $email, $institution, $npm, $faculty, $phone);
-}
+    $stmtCount->bind_param('i', $event_id);
+    $stmtCount->execute();
+    $registered = (int) $stmtCount->get_result()->fetch_assoc()['total'];
+    $stmtCount->close();
 
-if ($stmtIns->execute()) {
+    if ($registered >= (int) $event['quota']) {
+        $conn->rollback();
+        respond(false, 'Maaf, kuota untuk event ini sudah penuh.', $isAjax);
+    }
+
+    /* ── Cek duplikasi pendaftaran ── */
+    if ($event_type === 'internal') {
+        $stmtDup = $conn->prepare('SELECT id FROM registrations WHERE event_id = ? AND npm = ?');
+        $stmtDup->bind_param('is', $event_id, $npm);
+    } else {
+        $stmtDup = $conn->prepare('SELECT id FROM registrations WHERE event_id = ? AND email = ?');
+        $stmtDup->bind_param('is', $event_id, $email);
+    }
+    $stmtDup->execute();
+    $stmtDup->store_result();
+    if ($stmtDup->num_rows > 0) {
+        $conn->rollback();
+        respond(false, 'Anda sudah terdaftar pada event ini sebelumnya.', $isAjax);
+    }
+    $stmtDup->close();
+
+    /* ── Simpan pendaftaran ke database ── */
+    $hasIpCol = (bool) $conn->query("SHOW COLUMNS FROM registrations LIKE 'ip_address'")->num_rows;
+
+    if ($hasIpCol) {
+        $stmtIns = $conn->prepare(
+            "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone, ip_address)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        );
+        $stmtIns->bind_param('isssssss', $event_id, $full_name, $email, $institution, $npm, $faculty, $phone, $ip);
+    } else {
+        $stmtIns = $conn->prepare(
+            "INSERT INTO registrations (event_id, full_name, email, institution, npm, faculty, phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+        $stmtIns->bind_param('issssss', $event_id, $full_name, $email, $institution, $npm, $faculty, $phone);
+    }
+
+    if (!$stmtIns->execute()) {
+        throw new RuntimeException('Execute gagal: ' . $stmtIns->error);
+    }
+
+    $conn->commit();
+
     // Kirim email konfirmasi (error email tidak gagalkan pendaftaran)
     sendRegistrationEmail($email, $full_name, $event['name'], $event);
     respond(true, "Pendaftaran berhasil! Email konfirmasi telah dikirim ke {$email}.", $isAjax);
-} else {
+
+} catch (RuntimeException $e) {
+    $conn->rollback();
     respond(false, 'Terjadi kesalahan sistem saat menyimpan data. Silakan coba lagi.', $isAjax);
 }

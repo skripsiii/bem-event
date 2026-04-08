@@ -30,7 +30,7 @@ require_once __DIR__ . '/../config/database.php';
     <nav class="navbar navbar-expand-lg navbar-dark" style="background: #3a86ff">
         <div class="container">
             <a class=" navbar-brand d-flex align-items-center" href="<?php echo BASE_URL; ?>index.php">
-                 <img src="<?php echo BASE_URL; ?>assets/img/logo-bem.png" alt="Logo BEM Fasilkom Unsika" style="height: 50px;">
+                 <img src="<?php echo BASE_URL; ?>assets/img/logo-bem.png" alt="Logo BEM Fasilkom Unsika" style="height: 30px;">
                  <span>BEM Fasilkom Unsika</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">

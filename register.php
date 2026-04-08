@@ -179,7 +179,7 @@ $conn->close();
                                     Fakultas <span class="text-danger">*</span>
                                 </label>
                                 <input type="text" class="form-control" id="faculty" name="faculty"
-                                       placeholder="Masukkan nama fakultas secara lengkap" required autocomplete="faculty">
+                                       placeholder="Masukkan nama fakultas secara lengkap" autocomplete="off">
                             </div>
                         </div>
 
