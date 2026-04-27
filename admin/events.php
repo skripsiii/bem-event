@@ -15,9 +15,10 @@ $sql = "SELECT e.*, COUNT(r.id) AS registered
         ORDER BY e.created_at DESC";
 $result = $conn->query($sql);
 $today  = date('Y-m-d');
+
 ?>
 
-<div class="container-fluid fade-in px-3 px-md-4">
+<div class="container-fluid fade-in px-3 px-md-4 mt-4">
 
     <!-- ── Header ── -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -25,7 +26,6 @@ $today  = date('Y-m-d');
             <h2 class="fw-bold text-primary fs-4 mb-0">
                 <i class="fas fa-calendar-alt me-2"></i>Manajemen Event
             </h2>
-            <p class="text-muted small mb-0 mt-1">Kelola semua event dan peserta</p>
         </div>
         <a href="event_add.php" class="btn btn-primary btn-sm px-3">
             <i class="fas fa-plus-circle me-1"></i>Tambah Event
@@ -76,6 +76,19 @@ $today  = date('Y-m-d');
                         <?php $no = 1; while ($event = $result->fetch_assoc()):
                             $registered = (int) $event['registered'];
                             $remaining  = $event['quota'] - $registered;
+
+                            // Satu variabel status — dipakai oleh badge DAN tombol toggle
+                            if (!$event['is_active']) {
+                                $statusLabel = 'nonaktif';
+                            } elseif ($today < $event['registration_open']) {
+                                $statusLabel = 'belum_buka';
+                            } elseif ($today > $event['registration_close']) {
+                                $statusLabel = 'ditutup';
+                            } elseif ($remaining <= 0) {
+                                $statusLabel = 'penuh';
+                            } else {
+                                $statusLabel = 'aktif';
+                            }
                         ?>
                         <tr>
                             <td class="text-center text-muted small"><?= $no++ ?></td>
@@ -115,15 +128,17 @@ $today  = date('Y-m-d');
                             </td>
 
                             <td class="text-center">
-                                <?php if (!$event['is_active']): ?>
-                                    <span class="badge bg-secondary badge-sm">Nonaktif</span>
-                                <?php elseif ($remaining <= 0): ?>
-                                    <span class="badge bg-danger badge-sm">Kuota Penuh</span>
-                                <?php elseif ($today > $event['registration_close']): ?>
-                                    <span class="badge bg-warning badge-sm">Ditutup</span>
-                                <?php else: ?>
-                                    <span class="badge bg-success badge-sm">Aktif</span>
-                                <?php endif; ?>
+                                <?php
+                                $badgeMap = [
+                                    'nonaktif'   => ['bg-secondary', 'Nonaktif'],
+                                    'belum_buka' => ['bg-info',      'Belum Buka'],
+                                    'ditutup'    => ['bg-warning',   'Ditutup'],
+                                    'penuh'      => ['bg-danger',    'Kuota Penuh'],
+                                    'aktif'      => ['bg-success',   'Aktif'],
+                                ];
+                                [$badgeClass, $badgeText] = $badgeMap[$statusLabel];
+                                ?>
+                                <span class="badge <?= $badgeClass ?> badge-sm"><?= $badgeText ?></span>
                             </td>
 
                             <!-- ── Tombol Aksi (em-btn adalah class yang terdefinisi di CSS) ── -->
@@ -160,12 +175,17 @@ $today  = date('Y-m-d');
                                     </form>
 
                                     <!-- Toggle Status (AJAX via .btn-toggle) -->
+                                    <?php
+                                    // Hanya status 'aktif', 'penuh', dan 'belum_buka' yang bisa dinonaktifkan
+                                    // 'ditutup' dan 'nonaktif' ditampilkan sebagai tombol aktifkan
+                                    $canDeactivate = in_array($statusLabel, ['aktif', 'penuh', 'belum_buka']);
+                                    ?>
                                     <a href="toggle_event.php?id=<?= $event['id'] ?>"
-                                       class="em-btn <?= $event['is_active'] ? 'em-btn-muted' : 'em-btn-success' ?> btn-toggle"
-                                       title="<?= $event['is_active'] ? 'Nonaktifkan' : 'Aktifkan' ?>"
-                                       data-bs-toggle="tooltip">
-                                        <i class="fas <?= $event['is_active'] ? 'fa-ban' : 'fa-check' ?>"></i>
-                                        <span><?= $event['is_active'] ? 'Off' : 'On' ?></span>
+                                    class="em-btn <?= $canDeactivate ? 'em-btn-muted' : 'em-btn-success' ?> btn-toggle"
+                                    title="<?= $canDeactivate ? 'Nonaktifkan' : 'Aktifkan' ?>"
+                                    data-bs-toggle="tooltip">
+                                        <i class="fas <?= $canDeactivate ? 'fa-ban' : 'fa-check' ?>"></i>
+                                        <span><?= $canDeactivate ? 'Off' : 'On' ?></span>
                                     </a>
 
                                 </div>

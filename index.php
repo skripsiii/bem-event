@@ -19,9 +19,9 @@ $search   = isset($_GET['search'])   ? trim($_GET['search'])   : '';
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
 
 /* ── WHERE clause ── */
-$where      = 'e.is_active = 1 AND e.registration_open <= ? AND e.registration_close >= ?';
-$mainTypes  = 'ss';
-$mainParams = [$today, $today];
+$where      = 'e.is_active = 1 AND e.registration_open <= CURDATE() AND e.registration_close >= CURDATE()';
+$mainTypes  = '';
+$mainParams = [];
 
 if (!empty($search)) {
     $where        .= ' AND (e.name LIKE ? OR e.description LIKE ?)';
@@ -39,7 +39,9 @@ if (!empty($category)) {
 
 /* ── Count untuk pagination ── */
 $stmtCount = $conn->prepare("SELECT COUNT(*) AS total FROM events e WHERE {$where}");
+if (!empty($mainParams)){
 $stmtCount->bind_param($mainTypes, ...$mainParams);
+}
 $stmtCount->execute();
 $totalRows  = (int) $stmtCount->get_result()->fetch_assoc()['total'];
 $totalPages = (int) ceil($totalRows / $limit);
@@ -54,7 +56,11 @@ $mainSql = "SELECT e.*,
             LIMIT ? OFFSET ?";
 
 $stmt = $conn->prepare($mainSql);
-$stmt->bind_param($mainTypes . 'ii', ...[...$mainParams, $limit, $offset]);
+if (!empty($mainParams)) {
+    $stmt->bind_param($mainTypes . 'ii', ...[...$mainParams, $limit, $offset]);
+} else {
+    $stmt->bind_param('ii', $limit, $offset);
+}
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -65,11 +71,11 @@ define('DESC_LIMIT', 130);
 <div class="container">
 
     <!-- ── Header ── -->
-    <div class="row mb-4">
-        <div class="col text-center">
-            <h1 class="display-5 fw-bold">Selamat Datang di Sistem Pendaftaran Event</h1>
-            <p class="lead text-muted">BEM Fakultas Ilmu Komputer Universitas Singaperbangsa Karawang</p>
-        </div>
+    <div class="row mt-5 mb-4">
+    <div class="col text-center">
+        <h1 class="display-5 fw-bold">Selamat Datang di Sistem Pendaftaran Event</h1>
+        <p class="lead text-muted">BEM Fakultas Ilmu Komputer Universitas Singaperbangsa Karawang</p>
+    </div>
     </div>
 
     <!-- ── Search & Filter ── -->
@@ -78,7 +84,6 @@ define('DESC_LIMIT', 130);
             <form method="GET" class="row g-2 align-items-center">
                 <div class="col-md-5">
                     <div class="input-group">
-                        <span class="input-group-text bg-white"><i class="fas fa-search text-muted fa-sm"></i></span>
                         <input type="text" name="search" class="form-control border-start-0 ps-0"
                                placeholder="Cari nama event"
                                value="<?= htmlspecialchars($search) ?>">

@@ -3,7 +3,41 @@
    Handles: DataTables, Countdown, Read More, AJAX Forms, Admin ops
    ════════════════════════════════════════════════════════════════ */
 
-$(document).ready(function () {
+    $(document).ready(function () {
+
+        $(document).on('init.dt', function () {
+        fixDtLength();
+    });
+    function fixDtLength() {
+        var $label = $('.dataTables_length label');
+        $label.css({
+            'display'       : 'flex',
+            'align-items'   : 'center',
+            'flex-direction': 'row',
+            'flex-wrap'     : 'nowrap',
+            'gap'           : '6px',
+            'white-space'   : 'nowrap',
+            'font-size'     : '14px'
+        });
+        $('.dataTables_length select').css({
+            'display'          : 'inline-block',
+            'width'            : 'auto',
+            'min-width'        : '60px',
+            'max-width'        : '80px',
+            'padding'          : '4px 24px 4px 8px',
+            'border'           : '1.5px solid #e4e8f0',
+            'border-radius'    : '8px',
+            'font-size'        : '14px',
+            'background-color' : '#fff',
+            'appearance'       : 'none',
+            '-webkit-appearance': 'none',
+            'background-image' : "url(\"data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7280' d='M4 6l4 4 4-4'/%3E%3C/svg%3E\")",
+            'background-repeat': 'no-repeat',
+            'background-position': 'right 6px center',
+            'background-size'  : '12px',
+            'cursor'           : 'pointer',
+            'vertical-align'   : 'middle'
+        });
 
     /* ─────────────────────────────────────────────────────────────
        1. Bootstrap Tooltips
@@ -20,7 +54,10 @@ $(document).ready(function () {
             language : { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/id.json' },
             responsive: true,
             pageLength: 25,
-            order    : []
+            order    : [],
+            initComplete: function(){
+                fixDtLength();
+            }
         });
     }
 
@@ -35,7 +72,11 @@ $(document).ready(function () {
             var dist        = closing - now;
 
             if (dist < 0) {
-                $(this).html('<span class="badge bg-danger badge-sm">Ditutup</span>');
+                var $col = $(this).closest('.col-md-4, .col-md-6, .col-sm-6');
+                if ($col.length && !$col.data('expiring')) {
+                    $col.data('expiring', true);
+                    $col.fadeOut(800, function () { $(this).remove(); });
+                }
                 return;
             }
 
@@ -326,4 +367,4 @@ $(document).ready(function () {
             .replace(/"/g, '&quot;');
     }
 
-});
+}});
